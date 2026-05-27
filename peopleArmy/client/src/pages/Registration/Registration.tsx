@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { io, Socket } from 'socket.io-client';
+import md5 from 'md5';
 import { IBasePage, PAGES } from '../PageManager';
 import CONFIG from '../../config';
 import './Registration.css';
@@ -10,6 +11,7 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [socket, setSocket] = useState<Socket | null>(null);
+    const registrationOkRef = useRef(false);
 
     useEffect(() => {
         const client = io(CONFIG.SERVER_URL);
@@ -17,6 +19,7 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
 
         client.on(CONFIG.SOCKETS.REGISTRATION, (response: any) => {
             if (response.result === 'ok') {
+                registrationOkRef.current = true;
                 const userData = response?.data ?? null;
                 const token = userData?.token ?? null;
                 mediator.get(CONFIG.MEDIATOR.TRIGGERS.SET_STORE, { name: 'user', value: userData });
@@ -31,7 +34,9 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
 
         return () => {
             client.off(CONFIG.SOCKETS.REGISTRATION);
-            client.disconnect();
+            if (!registrationOkRef.current) {
+                client.disconnect();
+            }
             setSocket(null);
         };
     }, [setPage, mediator]);
@@ -40,13 +45,14 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
         setError('');
         socket?.emit(CONFIG.SOCKETS.REGISTRATION, {
             name: name.trim(),
-            password: password.trim(),
+            passwordHash: md5(password.trim()),
         });
     };
 
     return (
         <div className="registration-page">
             <div className="registration-card">
+                <p className="registration-brand">peopleArmy</p>
                 <h1 className="registration-title">Регистрация</h1>
                 <p className="registration-subtitle">Создайте аккаунт для доступа к чату</p>
                 <div className="registration-form">
@@ -74,10 +80,19 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
                         />
                     </div>
                     <div className="registration-actions">
-                        <button type="button" className="registration-btn registration-btn-primary" onClick={register}>
+                        <button
+                            type="button"
+                            className="registration-btn registration-btn-primary"
+                            onClick={register}
+                        >
                             Зарегистрироваться
                         </button>
-                        <button type="button" className="registration-btn registration-btn-secondary" onClick={() => props.setPage(PAGES.LOGIN)}>
+
+                        <button
+                            type="button"
+                            className="registration-btn registration-btn-secondary"
+                            onClick={() => props.setPage(PAGES.LOGIN)}
+                        >
                             У меня уже есть аккаунт
                         </button>
                     </div>
@@ -86,6 +101,6 @@ const Registration: React.FC<IBasePage> = (props: IBasePage) => {
             </div>
         </div>
     );
-}
+};
 
 export default Registration;

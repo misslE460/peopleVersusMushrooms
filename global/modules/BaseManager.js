@@ -1,4 +1,4 @@
-const CONFIG = require('../config');
+const GLOBAL_CONFIG = require('../globalConfig');
 
 class BaseManager {
     constructor(options) {
@@ -12,11 +12,18 @@ class BaseManager {
 
         this.EVENTS = this.mediator.getEventTypes();
         this.TRIGGERS = this.mediator.getTriggerTypes();
-		this.SOCKETS = CONFIG.SOCKET;
+		this.SOCKET = GLOBAL_CONFIG.SOCKET;
+    }
+
+    _log(data) {
+        let str = JSON.stringify(data, null, 2);
+        if (str.length > 200) str = str.substring(0, 200) + '...';
+        return str;
     }
 
     async send(url, data=null, method='POST') {
 		
+        console.log('========================================');
 		console.log('send to', url, data);
 		
         try {
@@ -31,11 +38,12 @@ class BaseManager {
             }
             const res = await fetch(url, params);
 			
-			console.log('res', res);
+			//console.log('res', res);
 			
             const answer = await res.json();
 			
-			console.log('answer', answer);
+			//console.log('\nanswer', this._log(answer));
+            console.log('========================================');
 			
             if (answer && answer.result === 'ok') {
                 return answer.data;
@@ -48,23 +56,23 @@ class BaseManager {
     }
 
     sendToMushroomsEconomy(urlPart, data=null) {
-        this.send(`${CONFIG.MUSHROOMS_ECONOMY.URL}${urlPart}`, data);
+        return this.send(`${GLOBAL_CONFIG.MUSHROOMS_ECONOMY.URL}${urlPart}`, data);
     }
 
     sendToMushroomsArmy(urlPart, data=null) {
-        this.send(`${CONFIG.MUSHROOMS_ARMY.URL}${urlPart}`, data);
+        return this.send(`${GLOBAL_CONFIG.MUSHROOMS_ARMY.URL}${urlPart}`, data);
     }
 
     sendToPeopleArmy(urlPart, data=null) {
-        this.send(`${CONFIG.PEOPLE_ARMY.URL}${urlPart}`, data);
+        return this.send(`${GLOBAL_CONFIG.PEOPLE_ARMY.URL}${urlPart}`, data);
     }
 
     sendToPeopleEconomy(urlPart, data=null) {
-        this.send(`${CONFIG.PEOPLE_ECONOMY.URL}${urlPart}`, data);
+        return this.send(`${GLOBAL_CONFIG.PEOPLE_ECONOMY.URL}${urlPart}`, data);
     }
 
     sendToMap(urlPart, data=null) {
-        this.send(`${CONFIG.MAP.URL}${urlPart}`, data);
+        return this.send(`${GLOBAL_CONFIG.MAP.URL}${urlPart}`, data);
     }
 }
 

@@ -50,10 +50,12 @@ const CONFIG = {
         LEAVE_LOBBY: 'LEAVE_LOBBY',
         DROP_FROM_LOBBY: 'DROP_FROM_LOBBY',
         START_GAME: 'START_GAME',
-        GET_LOBBIES: 'GET_LOBBYS',
+        GET_LOBBIES: 'GET_LOBBIES',
         LOBBY_UPDATED: 'LOBBY_UPDATED',
-        LOBBIES_LIST_UPDATED: 'LOBBYS_LIST_UPDATED',
+        LOBBIES_LIST_UPDATED: 'LOBBIES_LIST_UPDATED',
         SET_READY: 'SET_READY',
+
+        RELIEF_LOADED: 'RELIEF_LOADED',
 
         UPDATE_SCENE: 'UPDATE_SCENE',
         GET_SCENE: 'GET_SCENE',
@@ -82,6 +84,8 @@ const CONFIG = {
             WATER: 1,
             STONE: 2,
         },
+
+        MAP_SIZE: 100,
     },
 
 };

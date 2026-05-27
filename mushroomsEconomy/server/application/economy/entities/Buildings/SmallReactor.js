@@ -1,28 +1,48 @@
 const Building = require("./Building");
 const CONFIG = require("../../../../config");
 
-const { HP, SIZE, CONSUMPTION, PRODUCTION, CAPACITY } = CONFIG.ECONOMY.BIO_REACTOR_SMALL;
+const { HP, SIZE, CONSUMPTION, PRODUCTION, CAPACITY, TYPE, VISIBILITY, CONSUME_RADIUS } = CONFIG.ECONOMY.BIO_REACTOR_SMALL;
 
 class SmallReactor extends Building {
-    constructor({ type, guid, x, y, callbacks = {} }) {
-        super({ type, guid, x, y, callbacks, hp: HP, size: SIZE, consumption: CONSUMPTION, production: PRODUCTION, capacity: CAPACITY });
-
+    constructor({ guid, x, y, callbacks = {}, 
+        type = TYPE, 
+        hp = HP, 
+        size = SIZE, 
+        consumption = CONSUMPTION, 
+        production = PRODUCTION, 
+        capacity = CAPACITY, 
+        visibility = VISIBILITY }) {
+        super({ 
+            guid, x, y, callbacks,
+            type,
+            hp,
+            size,
+            consumption,
+            production,
+            capacity,
+            visibility,
+        });
+        
+        this.consumeRadius = CONSUME_RADIUS;
         this.energy = 0;
+        this.consumed = false;
+
     }
 
     get() {
         return {
             ...super.get(),
             energy: this.energy,
-            type: this.type,
+            consumed: this.consumed,
         };
     }
 
-    // возвращает мицелии рядом с реактором, готовые к потреблению
     getConsumable(mycelium) {
+        const r = this.consumeRadius;
         const result = [];
-        for (let dx = -1; dx <= this.size; dx++) {
-            for (let dy = -1; dy <= this.size; dy++) {
+        for (let dx = -r; dx < this.size + r; dx++) {
+            for (let dy = -r; dy < this.size + r; dy++) {
+                // пропуск клеток самого реактора
                 if (dx >= 0 && dx < this.size && dy >= 0 && dy < this.size) continue;
                 const nx = this.x + dx;
                 const ny = this.y + dy;
@@ -36,6 +56,12 @@ class SmallReactor extends Building {
     consumeMycelium(mycelium) {
         const consumableList = this.getConsumable(mycelium);
         
+        if (consumableList.length > 0) {
+            this.consumed = true;
+        } else {
+            this.consumed = false;
+        }
+
         for (const mc of consumableList) {
             const energyGain = mc.getPower();
             this.energy = Math.min(this.energy + energyGain, this.capacity);
@@ -43,6 +69,12 @@ class SmallReactor extends Building {
         }
         
         return consumableList.length;
+    }
+
+    consumeMushroom(mycelium) {
+        const consumed = this.consumeMycelium(mycelium);
+        this.consumed = consumed > 0;
+        return this.consumed;
     }
 }
 

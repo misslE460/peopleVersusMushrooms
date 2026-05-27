@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useContext  } from 'react';
+import { MediatorContext , ServerContext} from '../../App';
 import MapCanvas from './MapCanvas/MapCanvas';
 import './MapPage.scss';
 

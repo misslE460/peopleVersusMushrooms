@@ -1,172 +1,149 @@
-const CONFIG = require("../../../../config");
+const EasyStar = require('easystarjs');
+
+const DIRECTIONS = [
+    [0, 1], [0, -1], [1, 0], [-1, 0]
+];
 
 class Unit {
-    constructor({ x, y, guid, map, easystar }) {
-        //Описание юнита
+    constructor({ x, y, guid, map, type, visibility, speed = 0.3, sourcesVisibility }) {
+        this.guid = guid;
+        this.type = type;
+        this.visibility = visibility;
+        this.sourcesVisibility = sourcesVisibility;
+        this.units = [];
+
         this.x = x;
         this.y = y;
-        this.guid = guid;
+
+        this.targetX = x;
+        this.targetY = y;
+
+        this.path = [];
+
         this.hp = 1;
-        this.speed = 1;
 
-        //Для просчета пути и перемещения
-        this.easystar = easystar;
-        this.map = map;
+        this.speed = speed;
+        this.momentum = 0;
 
-        //Для работы методов
-        this.isMoving = false; //Можно ли переместить
-        this.path = []; //Маршрут
-        this.inertia = 0; // Накпление инерции
-        this.target = null; //клетка цели
-        this.pathRequested = false; // флаг, что путь запрошен
+        this.grid = map || null;
+
+        this.easyStar = new EasyStar.js();
+        this.easyStar.setAcceptableTiles([0]);
+        this.easyStar.enableSync();
+
+        if (this.grid) {
+            this.easyStar.setGrid(this.grid);
+        }
     }
 
     get() {
         return {
+            guid: this.guid,
             x: this.x,
             y: this.y,
-            hp: this.hp,
-            speed: this.speed,
-            guid: this.guid
+            type: this.type,
+            visibility: this.visibility,
+            sourcesVisibility: this.sourcesVisibility,
         };
     }
 
-    //найти ближайшую проходимую клетку к заданной
-    _findNearestWalkable(targetX, targetY, maxRadius = CONFIG.ECONOMY.UNIT.RADIUS) {
-        
-        if (this._isCellWalkable(targetX, targetY)) {
-            return { x: targetX, y: targetY };
-        }
-
-        return this._searchNearestWalkable(targetX, targetY, maxRadius);
+    setTarget(x, y) {
+        this.targetX = x;
+        this.targetY = y;
+        this._recalculatePath();
     }
 
-    _isCellWalkable(x, y) { //клетка находится в пределах карты и имеет значение 0
-        return this.map[y] && this.map[y][x] === 0;
+    setGrid(grid) {
+        this.grid = grid;
+        this.easyStar.setGrid(grid);
     }
 
-    _searchNearestWalkable(startX, startY, maxRadius) { //поиск ближайшей проходимой клетки
-        const queue = [{ x: startX, y: startY, distance: 0 }];
-        const visited = new Set();
-
-        const getKey = (x, y) => `${x},${y}`;
-        const addToQueue = (x, y, distance) => {
-            const key = getKey(x, y);
-            if (!visited.has(key)) {
-                visited.add(key);
-                queue.push({ x, y, distance });
-            }
-        };
-
-        while (queue.length > 0) {
-            const { x, y, distance } = queue.shift();
-
-            if (distance > maxRadius) break;
-
-            if (this._isCellWalkable(x, y)) {
-                return { x, y };
-            }
-
-            this._addNeighborsToQueue(x, y, distance + 1, addToQueue);
-        }
-
-        return null;
+    takeDamage(amount) {
+        this.hp = Math.max(0, this.hp - amount);
+        return this.hp <= 0;
     }
 
-    _addNeighborsToQueue(x, y, newDistance, addToQueue) { //Вспомогательный метод верх низ и тд
-        const neighbors = [
-            { x: x + 1, y: y },
-            { x: x - 1, y: y },
-            { x: x, y: y + 1 },
-            { x: x, y: y - 1 }
-        ];
+    findNearestCell() {
+        const currentX = Math.floor(this.x);
+        const currentY = Math.floor(this.y);
 
-        for (const neighbor of neighbors) {
-            if (this._isCellWithinBounds(neighbor.x, neighbor.y)) {
-                addToQueue(neighbor.x, neighbor.y, newDistance);
+        const occupiedCells = new Set();
+
+        if (this.visibility.buildings.length) {
+            for (const building of this.visibility.buildings) {
+                occupiedCells.add(`${Math.floor(building.x)},${Math.floor(building.y)}`);
             }
         }
-    }
 
-    _isCellWithinBounds(x, y) { // клетка существует в матрице
-        return this.map[y] && this.map[y][x] !== undefined;
-    }
+        const cells = [];
 
-    calcPath({ x, y }) { //строит путь
-        let corrected = this._findNearestWalkable(x, y);
-        if (!corrected) {
-            this.isMoving = false;
-            this.path = null;
-            this.target = null;
-            this.pathRequested = false;
-            return;
-        }
+        for (const [dx, dy] of DIRECTIONS) {
+            const nx = currentX + dx;
+            const ny = currentY + dy;
 
-        this.target = corrected;
-        this.pathRequested = true;
-
-        if (this.easystar.setGrid) this.easystar.setGrid(this.map);
-
-        this.easystar.findPath(this.x, this.y, this.target.x, this.target.y, (path) => {
-            if (path) {
-                this.path = path;
-                this.isMoving = true;
-            } else {
-                this.path = null;
-                this.isMoving = false;
+            if (this.grid[ny]?.[nx] !== undefined && !occupiedCells.has(`${nx},${ny}`)) {
+                cells.push({ x: nx, y: ny });
             }
-            this.pathRequested = false;
-        });
-
-        this.easystar.calculate();
-    }
-
-    _recalculatePath() { // Перестраивает путь к текущей цели
-        if (!this.target) return;
-        this.calcPath(this.target.x, this.target.y);
-    }
-
-    moveOneStep() { // Продвигает юнита на один шаг
-        if (!this.isMoving) return false;
-
-        if (this.pathRequested) return false;
-
-        if (!this.path || this.path.length === 0) {
-            this.isMoving = false;
-            return false;
         }
 
-        this.inertia += this.speed;
-        if (this.inertia < 1) return false;
+        return cells;
+    }
 
-        let nextStep = this.path[0];
-        if (nextStep.x === this.x && nextStep.y === this.y) {
+    update() {
+        if (this._hasReachedTarget()) return;
+
+        this.momentum += this.speed;
+
+        if (this.momentum >= 1.0) {
+            this.momentum -= 1.0;
+            this._tryStep();
+        }
+    }
+
+    _hasReachedTarget() {
+        return this.x === this.targetX && this.y === this.targetY;
+    }
+
+    _tryStep() {
+        if (this.path.length === 0) return;
+
+        const next = this.path[0];
+
+        if (this._isCellWalkable(next.x, next.y)) {
+            this.x = next.x;
+            this.y = next.y;
             this.path.shift();
-            nextStep = this.path[0];
-        }
-
-        if (!nextStep) {
-            this.isMoving = false;
-            this.inertia = 0;
-            return false;
-        }
-
-        const isWalkable = this.map[nextStep.y] && this.map[nextStep.y][nextStep.x] === 0;
-        if (!isWalkable) {
+        } else {
             this._recalculatePath();
-            this.isMoving = false;  
-            this.inertia = 0;
-            return false;
         }
+    }
 
-        this.inertia -= 1;
+    _recalculatePath() {
+        if (!this.grid) return;
+        if (this._hasReachedTarget()) return;
 
-        this.x = nextStep.x;
-        this.y = nextStep.y;
-        this.path.shift();
+        this.path = [];
 
-        if (this.path.length === 0) {
-            this.isMoving = false;
+        this.easyStar.findPath(
+            this.x, this.y,
+            this.targetX, this.targetY,
+            (foundPath) => {
+                this.path = foundPath ? foundPath.slice(1) : [];
+            }
+        );
+
+        this.easyStar.calculate();
+    }
+
+    setUnits(units) {
+        this.units = units;
+    }
+
+    _isCellWalkable(x, y) {
+        if (this.grid?.[y]?.[x] !== 0) return false;
+
+        for (const unit of this.units) {
+            if (unit.guid !== this.guid && unit.x === x && unit.y === y) return false;
         }
 
         return true;

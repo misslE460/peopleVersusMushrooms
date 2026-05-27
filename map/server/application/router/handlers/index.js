@@ -1,9 +1,8 @@
-const useUpdateUnitsHandler = require("./useUpdateUnitsHandler");
-const useUpdateBuildingsHandler = require("./useUpdateBuildingsHandler");
-const useGetVisibilityHandler = require("./useGetVisibilityHandler");
-const useGetResourseVisibilityHandler = require("./useGetResourseVisibilityHandler");
-const useGetGeneratedMapHandler = require("./useGetGeneratedMapHandler");
-const useGetReliefHandler = require ("./useGetReliefHandler");
+const useUpdateUnitsHandler = require("./mapHandlers/useUpdateUnitsHandler");
+const useUpdateBuildingsHandler = require("./mapHandlers/useUpdateBuildingsHandler");
+const useGetVisibilityHandler = require("./mapHandlers/useGetVisibilityHandler");
+const useGetResourseVisibilityHandler = require("./mapHandlers/useGetResourseVisibilityHandler");
+const useGetReliefHandler = require ("./mapHandlers/useGetReliefHandler");
 
 const useCreateLobbyHandler = require("./lobbyHandlers/useCreateLobbyHandler");
 const useJoinToLobbyHandler = require("./lobbyHandlers/useJoinToLobbyHandler");
@@ -18,7 +17,6 @@ module.exports = {
     useGetReliefHandler,
     useGetVisibilityHandler,
     useGetResourseVisibilityHandler,
-    useGetGeneratedMapHandler,
 
     useUpdateUnitsHandler,
     useUpdateBuildingsHandler,

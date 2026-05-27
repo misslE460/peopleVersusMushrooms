@@ -14,7 +14,6 @@ const Lobby: React.FC<IBasePage> = (props) => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [lobbyName, setLobbyName] = useState('');
     const [currentLobby, setCurrentLobby] = useState<ILobby | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
     const [isReady, setIsReady] = useState(false);
 
     const logoutClickHandler = async () => {
@@ -28,7 +27,6 @@ const Lobby: React.FC<IBasePage> = (props) => {
 
     const confirmCreateLobby = () => {
         if (lobbyName.trim()) {
-            console.log(server.user.guid)
             server.createLobby(server.user.guid, lobbyName.trim(), 'spectator');
             setLobbyName('');
             setShowCreateModal(false);
@@ -41,7 +39,7 @@ const Lobby: React.FC<IBasePage> = (props) => {
     }
 
     const joinLobbyHandler = (lobbyGuid: string) => {
-        server.joinToLobby(server.user.guid, lobbyGuid, 'spectator');
+        server.joinToLobby(server.user.guid, lobbyGuid, 'spectator')
     }
 
     const leaveLobbyHandler = () => {
@@ -50,15 +48,18 @@ const Lobby: React.FC<IBasePage> = (props) => {
     }
 
     const startGameHandler = () => {
-        server.generateMap();
         server.startGame(server.user.guid);
-        setPage(PAGES.MAP);
     }
 
     const setReadyHandler = () => {
         server.setReady(server.user.guid);
     }
 
+    const kickPlayerHandler = (targetGuid: string) => {
+        if (window.confirm('Вы уверены, что хотите кикнуть этого игрока?')) {
+            server.dropFromLobby(server.user.guid, targetGuid);
+        }
+    }
 
     useEffect(() => {
         const {
@@ -72,7 +73,7 @@ const Lobby: React.FC<IBasePage> = (props) => {
             START_GAME,
             GENERATE_MAP,
             SET_READY,
-
+            DROP_FROM_LOBBY
         } = mediator.getEventTypes();
 
         const logoutHandler = () => {
@@ -82,44 +83,42 @@ const Lobby: React.FC<IBasePage> = (props) => {
 
         const serverErrorHandler = (error: TError) => {
             setError(error);
-            setIsLoading(false);
         };
 
         const createLobbyHandler = (data: any) => {
             setCurrentLobby(data);
             setIsReady(false);
-            setIsLoading(false);
-        };
-
-        const mapHandler = (data: TMap) => {
-            console.log('Карта получена:', data);
-            server.setGeneratedMap(data);
         };
 
         const joinToLobbyHandler = (data: any) => {
             console.log('Присоединились к комнате:', data);
             setCurrentLobby(data);
             setIsReady(false);
-            setIsLoading(false);
         };
 
         const leaveLobbyHandler = (data: any) => {
             console.log('Покинули комнату:', data);
             setCurrentLobby(null);
             setIsReady(false);
-            setIsLoading(false);
         };
 
         const getLobbiesHandler = () => {
             const data = server.getLobbies();
             console.log('Список комнат:', data);
             setLobbies(data || []);
-            setIsLoading(false);
         };
 
         const lobbyUpdatedHandler = (data: any) => {
             console.log('Комната обновлена:', data);
             setCurrentLobby(data);
+            if (data.playersReady && server.user) {
+                const userRole = Object.keys(data.playersGuids).find(
+                    role => data.playersGuids[role] === server.user.guid
+                );
+                if (userRole) {
+                    setIsReady(data.playersReady[userRole] || false);
+                }
+            }
         };
 
         const lobbiesListUpdatedHandler = (data: any) => {
@@ -129,10 +128,22 @@ const Lobby: React.FC<IBasePage> = (props) => {
 
         const startGameHandler = (data: any) => {
             console.log('Игра началась:', data);
+            const mapGuid = currentLobby?.lobbyGuid;
+            if (mapGuid && server.user) {
+                server.getRelief(mapGuid, server.user?.guid);
+            }
+            setPage(PAGES.MAP);
         };
 
-        const setReadyHandlerFromServer = (data: any) => {
+        const setReadyHandler = (data: any) => {
             setIsReady(true);
+        };
+
+        const dropFromLobbyHandler = (data: any) => {
+            console.log('Игрок кикнут из лобби:', data);
+            if (data && currentLobby && currentLobby.lobbyGuid === data.lobbyGuid) {
+                setCurrentLobby(data);
+            }
         };
 
         mediator.subscribe(LOGOUT, logoutHandler);
@@ -144,8 +155,8 @@ const Lobby: React.FC<IBasePage> = (props) => {
         mediator.subscribe(LOBBY_UPDATED, lobbyUpdatedHandler);
         mediator.subscribe(LOBBIES_LIST_UPDATED, lobbiesListUpdatedHandler);
         mediator.subscribe(START_GAME, startGameHandler);
-        mediator.subscribe(GENERATE_MAP, mapHandler);
-        mediator.subscribe(SET_READY, setReadyHandlerFromServer);
+        mediator.subscribe(SET_READY, setReadyHandler);
+        mediator.subscribe(DROP_FROM_LOBBY, dropFromLobbyHandler);
 
         return () => {
             mediator.unsubscribe(LOGOUT, logoutHandler);
@@ -156,10 +167,10 @@ const Lobby: React.FC<IBasePage> = (props) => {
             mediator.unsubscribe(LOBBY_UPDATED, lobbyUpdatedHandler);
             mediator.unsubscribe(LOBBIES_LIST_UPDATED, lobbiesListUpdatedHandler);
             mediator.unsubscribe(START_GAME, startGameHandler);
-            mediator.unsubscribe(GENERATE_MAP, mapHandler);
-            mediator.unsubscribe(SET_READY, setReadyHandlerFromServer);
+            mediator.unsubscribe(SET_READY, setReadyHandler);
+            mediator.unsubscribe(DROP_FROM_LOBBY, dropFromLobbyHandler);
         };
-    }, [mediator, setPage, server]);
+    }, [mediator, setPage, server, currentLobby]);
 
     return (
         <div className='lobby'>
@@ -180,54 +191,40 @@ const Lobby: React.FC<IBasePage> = (props) => {
             </div>
 
             {error && <p id='test-errors-lobby' className='errors'>{error.message}</p>}
-
             {currentLobby && (
                 <div className="current-lobby">
                     <h2>Текущая комната: {currentLobby.lobbyName}</h2>
-                    <div className="lobby-info">
-                        <p>Игроки: {Object.values(currentLobby.playersGuids).filter(g => g !== null).length}/5</p>
-                        <div className="players-list">
-                            <h3>Игроки:</h3>
-                            <ul>
-                                {
-                                    Object.keys(currentLobby.playersGuids)
-                                        .filter(role => currentLobby.playersGuids[role as keyof typeof currentLobby.playersGuids] !== null)
-                                        .map((role, index) => (
-                                            <li key={index}>
-                                                {role} {currentLobby.playersGuids[role as keyof typeof currentLobby.playersGuids] === currentLobby.lobbyGuid && '(Создатель)'}
-                                            </li>
-                                        ))}
-                            </ul>
-                        </div>
-                        <Button
-                            onClick={setReadyHandler}
-                            text={'Готов'}
-                        />
-
-                        {currentLobby.lobbyGuid === currentLobby.playersGuids.spectator && (
-                            <Button
-                                onClick={startGameHandler}
-                                text='Начать игру'
-                                className='button-start-game'
-                                isDisabled={!isReady}
-                            />
-                        )}
-                        <Button
-                            onClick={leaveLobbyHandler}
-                            text='Покинуть комнату'
-                            className='button-leave'
-                        />
+                    <div className="player-info">
+                        {isReady ? '✅ Готов' : '⏳ Не готов'}
                     </div>
+                    <Button
+                        onClick={setReadyHandler}
+                        text={'Готов'}
+                    />
+
+                    {currentLobby.lobbyGuid === currentLobby.playersGuids.spectator && (
+                        <Button
+                            onClick={startGameHandler}
+                            text='Начать игру'
+                            className='button-start-game'
+                            isDisabled={!isReady}
+                        />
+                    )}
+                    <Button
+                        onClick={leaveLobbyHandler}
+                        text='Покинуть комнату'
+                        className='button-leave'
+                    />
                 </div>
-            )}
+            )
+            }
 
             <div className="lobbies-list">
                 <h2>Доступные комнаты</h2>
-                {isLoading && <p>Загрузка...</p>}
-                {!isLoading && lobbies.length === 0 && (
+                {lobbies.length === 0 && (
                     <p>Нет доступных комнат. Создайте первую!</p>
                 )}
-                {!isLoading && lobbies.length > 0 && (
+                {lobbies.length > 0 && (
                     <div className="lobbies-grid">
                         {lobbies.map((lobby) => (
                             <div key={lobby.lobbyGuid} className="lobby-card">
@@ -246,33 +243,35 @@ const Lobby: React.FC<IBasePage> = (props) => {
                 )}
             </div>
 
-            {showCreateModal && (
-                <div className="modal-overlay" onClick={cancelCreateLobby}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h2>Создать комнату</h2>
-                        <input
-                            type="text"
-                            placeholder="Название комнаты"
-                            value={lobbyName}
-                            onChange={(e) => setLobbyName(e.target.value)}
-                            autoFocus
-                        />
-                        <div className="modal-buttons">
-                            <Button
-                                onClick={confirmCreateLobby}
-                                text='Создать'
-                                className='button-confirm'
+            {
+                showCreateModal && (
+                    <div className="modal-overlay" onClick={cancelCreateLobby}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                            <h2>Создать комнату</h2>
+                            <input
+                                type="text"
+                                placeholder="Название комнаты"
+                                value={lobbyName}
+                                onChange={(e) => setLobbyName(e.target.value)}
+                                autoFocus
                             />
-                            <Button
-                                onClick={cancelCreateLobby}
-                                text='Отмена'
-                                className='button-cancel'
-                            />
+                            <div className="modal-buttons">
+                                <Button
+                                    onClick={confirmCreateLobby}
+                                    text='Создать'
+                                    className='button-confirm'
+                                />
+                                <Button
+                                    onClick={cancelCreateLobby}
+                                    text='Отмена'
+                                    className='button-cancel'
+                                />
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     )
 }
 
